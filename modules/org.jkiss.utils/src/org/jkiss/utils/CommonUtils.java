@@ -22,6 +22,7 @@ import org.jkiss.code.Nullable;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -937,9 +938,51 @@ public class CommonUtils {
         return toString(o1).compareTo(toString(o2));
     }
 
-    public static int compareNumbers(Number value1, Number value2) {
-        double numDiff = value1.doubleValue() - value2.doubleValue();
-        return numDiff < 0 ? -1 : (numDiff > 0 ? 1 : 0);
+    /**
+     * Compares two numbers.
+     * <p>
+     * Note: This method uses precise comparison for integer types (Long, Integer, Short, Byte, BigInteger)
+     * to avoid precision loss when converting to double. For floating-point types, it falls back to
+     * double comparison which may have precision limitations for very large values.
+     * </p>
+     *
+     * @param value1 first number
+     * @param value2 second number
+     * @return comparison result: negative if value1 &lt; value2, positive if value1 &gt; value2, 0 if equal
+     */
+    public static int compareNumbers(@NotNull Number value1, @NotNull Number value2) {
+        // For integer types, use precise comparison to avoid double precision loss
+        // This is important for large long values (e.g., bigserial in PostgreSQL) which exceed double's 53-bit precision
+        if (isIntegerType(value1) && isIntegerType(value2)) {
+            return Long.compare(value1.longValue(), value2.longValue());
+        }
+
+        // For BigDecimal, use their native comparison
+        if (value1 instanceof BigDecimal && value2 instanceof BigDecimal) {
+            return ((BigDecimal) value1).compareTo((BigDecimal) value2);
+        }
+        if (value1 instanceof BigDecimal) {
+            return ((BigDecimal) value1).compareTo(BigDecimal.valueOf(value2.doubleValue()));
+        }
+        if (value2 instanceof BigDecimal) {
+            return BigDecimal.valueOf(value1.doubleValue()).compareTo((BigDecimal) value2);
+        }
+
+        // For floating-point types, use double comparison
+        // Note: This may have precision limitations for very large values
+        return Double.compare(value1.doubleValue(), value2.doubleValue());
+    }
+
+    /**
+     * Checks if the number is an integer type that can be precisely represented as long.
+     *
+     * @param number the number to check
+     * @return true if the number is an integer type (Long, Integer, Short, Byte, AtomicInteger, AtomicLong)
+     */
+    private static boolean isIntegerType(@NotNull Number number) {
+        return number instanceof Long || number instanceof Integer || number instanceof Short
+                || number instanceof Byte || number instanceof java.util.concurrent.atomic.AtomicInteger
+                || number instanceof java.util.concurrent.atomic.AtomicLong;
     }
 
     public static String cutExtraLines(String message, int maxLines) {
